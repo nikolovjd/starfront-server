@@ -1,0 +1,24 @@
+version: '3'
+
+services:
+  server:
+    restart: always
+    build: ./
+    container_name: starfront-server
+    volumes:
+      - ./:/app
+    ports:
+      - 3000:3000
+  db:
+    container_name: starfront-db
+    restart: always
+    image: mysql:5.7.22
+    environment:
+      MYSQL_DATABASE: starfront
+      MYSQL_USER: dev
+      MYSQL_PASSWORD: dev
+      MYSQL_ROOT_PASSWORD:  root
+    volumes:
+      - /etc/mysql:/var/lib/mysql
+    ports:
+      - 3306:3306
