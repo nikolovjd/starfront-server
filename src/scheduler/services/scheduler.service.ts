@@ -21,6 +21,7 @@ interface ResolverDispatch {
 
 @Injectable()
 export class SchedulerService implements OnModuleInit {
+  private ticking = false;
   private taskQueue: Task[] = [];
   private resolvers: Map<string, StoredResolver[]> = new Map();
   private tickCron: CronJob;
@@ -30,7 +31,6 @@ export class SchedulerService implements OnModuleInit {
     @InjectConnection() private readonly connection: Connection,
     @InjectRepository(Task) private readonly taskRepository: Repository<Task>,
   ) {
-    console.log('SCHEDULER CONSTRUCTOR');
     this.tickCron = new CronJob('* * * * * *', this.tick.bind(this));
   }
 
@@ -39,7 +39,6 @@ export class SchedulerService implements OnModuleInit {
     await task.save();
     this.insertTask(task);
     return task;
-    console.log('ADD TASK');
   }
 
   public addResolver(resolver: IResolver): void {
@@ -58,17 +57,17 @@ export class SchedulerService implements OnModuleInit {
       };
 
       resolvers.push(storedResolver);
+      this.resolvers.set(type, resolvers);
     }
-
-    console.log('RESOLVER ADDED');
   }
 
   private createTask(data: ITask): Task {
     const start = moment().set({ milliseconds: 0 });
-    const end = start.add({ second: data.duration });
+    const end = start.clone().add({ second: data.duration });
 
     return this.taskRepository.create({
       status: TaskStatus.IN_PROGRESS,
+      type: data.type,
       data: data.data,
       start: start.toDate(),
       end: end.toDate(),
@@ -81,6 +80,7 @@ export class SchedulerService implements OnModuleInit {
     if (insertIndex >= this.taskQueue.length) {
       this.taskQueue.push(task);
     } else {
+      console.time;
       this.taskQueue.splice(insertIndex + 1, 0, task);
     }
   }
@@ -92,6 +92,7 @@ export class SchedulerService implements OnModuleInit {
       // TODO: handle?
       return;
     }
+
     this.taskQueue.splice(deleteIndex, 1);
   }
 
@@ -136,7 +137,8 @@ export class SchedulerService implements OnModuleInit {
   }
 
   private findDeleteIndex(task: Task) {
-    const time = task.end;
+    return this.taskQueue.map(t => t.id).indexOf(task.id);
+    /*const time = task.end;
     const id = task.id;
 
     let beginning = 0;
@@ -185,50 +187,59 @@ export class SchedulerService implements OnModuleInit {
       return pivot;
     } else {
       return -1;
-    }
+    }*/
   }
 
   private async tick() {
-    console.log('SCHEDULER TICK');
-    const tickTasks = this.getTasksForTick();
+    try {
+      const d = new Date().toISOString();
+      console.time(`scheduler tick ${d}`);
+      const tickTasks = this.getTasksForTick();
+      console.log('Tasks: ', tickTasks.length);
 
-    if (!tickTasks.length) {
-      return;
-    }
+      if (!tickTasks.length) {
+        console.timeEnd(`scheduler tick ${d}`);
+        return;
+      }
 
-    const resolversDispatch: ResolverDispatch[] = [];
+      const resolversDispatch: ResolverDispatch[] = [];
 
-    // Get resolvers
-    for (const task of tickTasks) {
-      const type = task.type;
-      const resolvers = this.resolvers.get(type);
+      // Get resolvers
+      for (const task of tickTasks) {
+        const type = task.type;
+        const resolvers = this.resolvers.get(type);
 
-      for (const resolver of resolvers) {
-        const existingResolverInDispatch = resolversDispatch.find(
-          r => r.resolver.id === resolver.id,
-        );
+        for (const resolver of resolvers) {
+          const existingResolverInDispatch = resolversDispatch.find(
+            r => r.resolver.id === resolver.id,
+          );
 
-        if (!existingResolverInDispatch) {
-          resolversDispatch.push({ resolver, tasks: [task] });
-        } else {
-          existingResolverInDispatch.tasks.push(task);
+          if (!existingResolverInDispatch) {
+            resolversDispatch.push({ resolver, tasks: [task] });
+          } else {
+            existingResolverInDispatch.tasks.push(task);
+          }
         }
       }
-    }
 
-    await this.connection.transaction(async transaction => {
-      const resolutions = [];
+      const transactions = [];
+
       for (const { resolver, tasks } of resolversDispatch) {
-        const resolution = resolver.resolver.finishTasks(tasks, transaction);
-        resolutions.push(resolution);
+        for (const task of tasks) {
+          const transaction = this.connection.transaction(async transaction => {
+            await resolver.resolver.finishTask(task, transaction);
+            await this.setTaskToFinished(task, transaction);
+            this.removeTask(task);
+          });
+
+          transactions.push(transaction);
+        }
       }
 
-      await Promise.all(resolutions);
-      await this.setTasksToFinished(tickTasks, transaction);
-    });
-
-    for (const task of tickTasks) {
-      this.removeTask(task);
+      await Promise.all(transactions);
+      console.timeEnd(`scheduler tick ${d}`);
+    } catch (err) {
+      console.log(err);
     }
   }
 
@@ -248,17 +259,14 @@ export class SchedulerService implements OnModuleInit {
     return tasks;
   }
 
-  private async setTasksToFinished(tasks: Task[], transaction: EntityManager) {
-    for (const task of tasks) {
-      task.status = TaskStatus.FINISHED;
-    }
+  private async setTaskToFinished(task: Task, transaction: EntityManager) {
+    task.status = TaskStatus.FINISHED;
 
-    await transaction.save(tasks);
+    await transaction.save(task);
   }
 
   async onModuleInit(): Promise<void> {
     // TODO: Load tasks from DB
-    console.log('INIT');
     this.tickCron.start();
   }
 }

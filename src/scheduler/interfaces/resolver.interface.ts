@@ -3,6 +3,6 @@ import { EntityManager } from 'typeorm';
 
 export interface IResolver {
   getTypes(): string[];
-  finishTasks(tasks: Task[], transaction: EntityManager): Promise<void>;
+  finishTask(task: Task, transaction: EntityManager): Promise<void>;
   cancelTask(task: Task, transaction: EntityManager): Promise<void>;
 }
