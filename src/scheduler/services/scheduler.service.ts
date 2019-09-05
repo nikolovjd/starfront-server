@@ -22,6 +22,8 @@ interface ResolverDispatch {
 @Injectable()
 export class SchedulerService implements OnModuleInit {
   private ticking = false;
+  private workerIndex: number = 0;
+  private totalWorkers: number = 1;
   private taskQueue: Task[] = [];
   private resolvers: Map<string, StoredResolver[]> = new Map();
   private tickCron: CronJob;
@@ -138,56 +140,6 @@ export class SchedulerService implements OnModuleInit {
 
   private findDeleteIndex(task: Task) {
     return this.taskQueue.findIndex(t => t.id === task.id);
-    /*const time = task.end;
-    const id = task.id;
-
-    let beginning = 0;
-    let end = this.taskQueue.length;
-    let pivot = ~~(this.taskQueue.length / 2);
-
-    while (beginning !== end) {
-      if (time < this.taskQueue[pivot].end) {
-        if (pivot !== end) {
-          end = pivot;
-        } else {
-          end = pivot - 1;
-        }
-      } else if (time > this.taskQueue[pivot].end) {
-        if (pivot !== beginning) {
-          beginning = pivot;
-        } else {
-          beginning = pivot + 1;
-        }
-        beginning = pivot;
-      } else {
-        // find the start of the elements with the same time
-        while (pivot > beginning) {
-          if (
-            this.taskQueue[pivot - 1] &&
-            this.taskQueue[pivot - 1].end === time
-          ) {
-            pivot--;
-          } else {
-            break;
-          }
-        }
-        // find the element
-        while (pivot < end) {
-          if (this.taskQueue[pivot].id === id) {
-            return pivot;
-          }
-          pivot++;
-        }
-        return -1;
-      }
-      pivot = beginning + ~~((end - beginning) / 2);
-    }
-
-    if (this.taskQueue[pivot].id === id) {
-      return pivot;
-    } else {
-      return -1;
-    }*/
   }
 
   private async tick() {
@@ -202,25 +154,7 @@ export class SchedulerService implements OnModuleInit {
         return;
       }
 
-      const resolversDispatch: ResolverDispatch[] = [];
-
-      // Get resolvers
-      for (const task of tickTasks) {
-        const type = task.type;
-        const resolvers = this.resolvers.get(type);
-
-        for (const resolver of resolvers) {
-          const existingResolverInDispatch = resolversDispatch.find(
-            r => r.resolver.id === resolver.id,
-          );
-
-          if (!existingResolverInDispatch) {
-            resolversDispatch.push({ resolver, tasks: [task] });
-          } else {
-            existingResolverInDispatch.tasks.push(task);
-          }
-        }
-      }
+      const resolversDispatch = this.getResolversForTasks(tickTasks);
 
       const transactions = [];
 
@@ -265,8 +199,81 @@ export class SchedulerService implements OnModuleInit {
     await transaction.save(task);
   }
 
+  private getResolversForTasks(tasks: Task[]): ResolverDispatch[] {
+    const result = [];
+
+    for (const task of tasks) {
+      const type = task.type;
+      const resolvers = this.resolvers.get(type);
+
+      for (const resolver of resolvers) {
+        const existingResolverInDispatch = result.find(
+          r => r.resolver.id === resolver.id,
+        );
+
+        if (!existingResolverInDispatch) {
+          result.push({ resolver, tasks: [task] });
+        } else {
+          existingResolverInDispatch.tasks.push(task);
+        }
+      }
+    }
+
+    return result;
+  }
+
+  // TODO: Maybe make it tick based instead of task by task
+  private async catchUpDowntimeTasks() {
+    let page = 0;
+    const elements = 200;
+
+    while (true) {
+      try {
+        const catchupTasks = await this.taskRepository
+          .createQueryBuilder()
+          .select()
+          .where(`status = '${TaskStatus.IN_PROGRESS}'`)
+          .andWhere(`(id + :totalWorkers - :workerIndex) % :totalWorkers = 0`, {
+            totalWorkers: this.totalWorkers,
+            workerIndex: this.workerIndex,
+          })
+          .andWhere(`end <= :time`, { time: new Date() })
+          .orderBy('end', 'ASC')
+          .take(elements)
+          .skip(elements * page++)
+          .getMany();
+
+        // -- FINISHED
+        if (!catchupTasks.length) {
+          console.log('DONE');
+          return;
+        }
+
+        const resolversDispatch = this.getResolversForTasks(catchupTasks);
+
+        const transactions = [];
+
+        for (const { resolver, tasks } of resolversDispatch) {
+          for (const task of tasks) {
+            const t = this.connection.transaction(async transaction => {
+              await resolver.resolver.catchupDowntimeTask(task, transaction);
+              await this.setTaskToFinished(task, transaction);
+            });
+
+            transactions.push(t);
+          }
+        }
+
+        await Promise.all(transactions);
+      } catch (err) {
+        console.log(err);
+      }
+    }
+  }
+
   async onModuleInit(): Promise<void> {
     // TODO: Load tasks from DB
-    this.tickCron.start();
+    await this.catchUpDowntimeTasks();
+    // this.tickCron.start();
   }
 }

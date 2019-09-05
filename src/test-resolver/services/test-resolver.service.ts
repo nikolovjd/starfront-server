@@ -34,7 +34,7 @@ export class TestResolverService implements OnModuleInit, IResolver {
     const d = new Date().toISOString();
     console.time(`resolver tick ${d}`);
     // add from 1000 to 10000 tasks
-    const amount = 600;
+    const amount = 100;
     const tasks: ITask[] = [];
     const buildings = ['a', 'b', 'c', 'd', 'e'];
 
@@ -62,11 +62,19 @@ export class TestResolverService implements OnModuleInit, IResolver {
     console.timeEnd(`resolver tick ${d}`);
   }
 
+  async catchupDowntimeTask(
+    task: any,
+    transaction: EntityManager,
+  ): Promise<void> {
+    // TODO: implement a way to handle income ticks and calculate properly
+    await this.finishTask(task, transaction);
+  }
+
   getTypes(): string[] {
     return ['building'];
   }
 
   onModuleInit(): any {
-    this.tickCron.start();
+    // this.tickCron.start();
   }
 }
