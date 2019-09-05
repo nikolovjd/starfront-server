@@ -22,8 +22,8 @@ interface ResolverDispatch {
 @Injectable()
 export class SchedulerService implements OnModuleInit {
   private ticking = false;
-  private workerIndex: number = 0;
-  private totalWorkers: number = 1;
+  private workerIndex: number = Number(process.env.WORKER_INDEX);
+  private totalWorkers: number = Number(process.env.WORKER_COUNT);
   private taskQueue: Task[] = [];
   private resolvers: Map<string, StoredResolver[]> = new Map();
   private tickCron: CronJob;
@@ -245,7 +245,6 @@ export class SchedulerService implements OnModuleInit {
 
         // -- FINISHED
         if (!catchupTasks.length) {
-          console.log('DONE');
           return;
         }
 
