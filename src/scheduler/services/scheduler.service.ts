@@ -137,7 +137,7 @@ export class SchedulerService implements OnModuleInit {
   }
 
   private findDeleteIndex(task: Task) {
-    return this.taskQueue.map(t => t.id).indexOf(task.id);
+    return this.taskQueue.findIndex(t => t.id === task.id);
     /*const time = task.end;
     const id = task.id;
 
