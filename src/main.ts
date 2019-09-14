@@ -2,9 +2,11 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { Logger, ValidationPipe } from '@nestjs/common';
+import * as cookieParser from 'cookie-parser';
 
 import * as cluster from 'cluster';
 import * as os from 'os';
+import { AuthCookieMiddleware } from './auth/middleware/auth-cookie.middleware';
 
 const numberOfCores = os.cpus().length;
 
@@ -35,6 +37,8 @@ async function bootstrap() {
   );
 
   app.setGlobalPrefix('api');
+  // TODO: CRITICAL: secret to config
+  app.use(cookieParser('giga-secret-no-kidding'));
 
   await app.listen(3000);
 }

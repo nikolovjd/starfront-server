@@ -2,6 +2,7 @@ import {
   BaseEntity,
   Column,
   Entity,
+  JoinColumn,
   OneToMany,
   OneToOne,
   PrimaryGeneratedColumn,
@@ -9,6 +10,7 @@ import {
 import { Password } from './password.entity';
 import { EmailConfirmationToken } from './email-confirmation-token.entity';
 import { RefreshToken } from '../../auth/models/refresh-token.entity';
+import { Empire } from '../../empire/models/empire.entity';
 
 @Entity()
 export class User extends BaseEntity {
@@ -29,4 +31,7 @@ export class User extends BaseEntity {
 
   @OneToMany(type => RefreshToken, token => token.user)
   refreshTokens: RefreshToken[];
+
+  @OneToOne(type => Empire, empire => empire.user)
+  empire: Empire;
 }
