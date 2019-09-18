@@ -14,8 +14,8 @@ import { BaseModule } from '../base/base.module';
     TypeOrmModule.forFeature([Empire]),
     forwardRef(() => AuthModule),
     MapModule,
-    BaseModule,
+    forwardRef(() => BaseModule),
   ],
-  exports: [],
+  exports: [EmpireService],
 })
 export class EmpireModule {}

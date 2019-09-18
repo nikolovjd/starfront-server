@@ -1,10 +1,11 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectConnection, InjectRepository } from '@nestjs/typeorm';
-import { Connection, Repository } from 'typeorm';
+import { Connection, EntityManager, Repository } from 'typeorm';
 import { Empire } from '../models/empire.entity';
 import { User } from '../../user/models/user.entity';
 import { MapService } from '../../map/services/map.service';
 import { BaseService } from '../../base/services/base.service';
+import { Cost } from '../interfaces/cost.interface';
 
 @Injectable()
 export class EmpireService {
@@ -41,5 +42,24 @@ export class EmpireService {
       }
     }
     return empire;
+  }
+
+  async chargeCost(user: User, cost: Cost, transaction: EntityManager) {
+    const empire = await transaction.findOne(Empire, { user });
+    // TODO: check in DB with Check constraint after mysql container update....
+    // not enough resources
+    if (
+      empire.metal - cost.metal < 0 ||
+      empire.crystal - cost.crystal < 0 ||
+      empire.deuterium - cost.deuterium < 0
+    ) {
+      throw new BadRequestException('not_enough_resources');
+    }
+
+    empire.metal -= cost.metal;
+    empire.crystal -= cost.crystal;
+    empire.deuterium -= cost.deuterium;
+
+    await transaction.save(empire);
   }
 }

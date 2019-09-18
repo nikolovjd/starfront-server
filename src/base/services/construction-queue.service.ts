@@ -6,6 +6,8 @@ import { SchedulerService } from '../../scheduler/services/scheduler.service';
 
 import { ITask } from '../../scheduler/interfaces/task.interface';
 import { Base } from '../models/base.entity';
+import { Buildings } from '../data/buildings.data';
+import { BuildingTaskData } from '../interfaces/BuildingTaskData';
 
 @Injectable()
 export class ConstructionQueueService implements IResolver {
@@ -26,7 +28,29 @@ export class ConstructionQueueService implements IResolver {
     );
   }
 
-  async build(base: Base, building: string) {}
+  async build(base: Base, building: Buildings) {
+    // TODO: check pre-requisites
+    // TODO: calculate cost
+    // TODO: calculate duration
+
+    const data: BuildingTaskData = {
+      building,
+      baseId: base.id,
+      cost: {
+        metal: 10,
+        crystal: 10,
+        deuterium: 10,
+      },
+    };
+
+    const task: ITask = {
+      type: 'building',
+      duration: 60, // TODO: calculate
+      data,
+    };
+
+    await this.scheduler.addTask(task);
+  }
 
   async catchupDowntimeTask(
     task: any,
