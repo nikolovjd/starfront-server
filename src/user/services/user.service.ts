@@ -1,7 +1,7 @@
 import { forwardRef, Inject, Injectable } from '@nestjs/common';
 import { User } from '../models/user.entity';
-import { getConnection, Repository } from 'typeorm';
-import { InjectRepository } from '@nestjs/typeorm';
+import { Connection, getConnection, Repository } from 'typeorm';
+import { InjectConnection, InjectRepository } from '@nestjs/typeorm';
 import { CreateUserRequestDto } from '../dto/request/create-user-request.dto';
 import { Password } from '../models/password.entity';
 import { EmailAlreadyExistsException } from '../exceptions/email-already-exists.exception';
@@ -14,6 +14,7 @@ import { AuthService } from '../../auth/services/auth.service';
 @Injectable()
 export class UserService {
   constructor(
+    @InjectConnection() private readonly connection: Connection,
     @InjectRepository(User) private readonly userRepository: Repository<User>,
     @InjectRepository(Password)
     private readonly passwordRepository: Repository<Password>,
@@ -35,7 +36,7 @@ export class UserService {
     password.hash = await this.authService.hashPassword(data.password);
 
     try {
-      await getConnection().transaction(async t => {
+      await this.connection.transaction(async t => {
         await t.save(user);
         password.user = user;
         await t.save(password);
@@ -98,7 +99,7 @@ export class UserService {
     user.emailConfirmed = true;
     confirmationToken.usedAt = new Date();
 
-    getConnection().transaction(async t => {
+    await this.connection.transaction(async t => {
       await t.save(confirmationToken);
       await t.save(user);
     });

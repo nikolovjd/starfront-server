@@ -40,6 +40,20 @@ export class AuthService {
     };
   }
 
+  public async getAccessToken(token: string) {
+    const { id, user } = await this.validateRefreshToken(token);
+
+    const payload = {
+      email: user.email,
+      sub: id,
+      parent: id,
+    };
+
+    return {
+      accessToken: this.jwtService.sign(payload),
+    };
+  }
+
   public async hashPassword(password: string): Promise<string> {
     const salt = await bcrypt.genSalt(10);
     return bcrypt.hash(password, salt);
@@ -100,6 +114,22 @@ export class AuthService {
         }
       }
     }
+    return refreshToken;
+  }
+
+  private async validateRefreshToken(token: string) {
+    // TODO: check if blacklisted etc
+    const refreshToken = await this.refreshTokenRepository.findOne({
+      where: { token },
+      relations: ['user'],
+    });
+
+    console.log('refreshToken', refreshToken);
+
+    if (!refreshToken) {
+      throw new UnauthorizedException();
+    }
+
     return refreshToken;
   }
 }

@@ -8,5 +8,5 @@
   "entities": ["dist/**/*.entity{.ts,.js}"],
   "migrations": ["dist/components/**/migration/*{.ts,.js}"],
   "synchronize": true,
-  "logging": true
+  "logging": false
 }
